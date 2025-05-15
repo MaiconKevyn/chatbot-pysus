@@ -5,6 +5,7 @@ Contém funções para carregamento dos diversos datasets utilizados na análise
 import os
 from pathlib import Path
 from typing import Tuple
+from functools import lru_cache
 
 import pandas as pd
 
@@ -19,6 +20,7 @@ def get_project_root() -> Path:
     # Considera que este arquivo está em src/
     return Path(__file__).parent.parent
 
+@lru_cache(maxsize=2)
 def load_raw() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Carrega os datasets brutos do projeto.
@@ -60,9 +62,11 @@ def load_raw() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         sep=";"
     )
 
-    return sus, idh, pol, ibge
+    return sus
 
-
+@lru_cache(maxsize=2)
+def load_sus() -> pd.DataFrame:
+    return load_raw()
 
 
 
