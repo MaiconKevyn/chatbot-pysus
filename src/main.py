@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 from agent import build_agent, get_response
 

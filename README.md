@@ -1,32 +1,42 @@
 # chatbot-pysus
 
-project-chatbot/
-├── data/
-│   ├── raw/
-│   │   ├── dados_sus3.csv
-│   │   ├── IDH_municipios_RS.csv
-│   │   ├── poluicao_do_ar_2014_2023.csv
-│   │   └── dados_IBGE_modificados.csv
-│   └── processed/
-│       └── merged_data.parquet
-│
-├── src/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── data_prep.py          # ETL e unificação dos dados
-│   ├── intents.py            # Definição de intents e slot-filling
-│   ├── functions.py          # Funções de domínio (média, total, ranking…)
-│   ├── chat_agent.py         # Código de function-calling ou PandasAgent
-│   └── app.py                # Interface CLI / FastAPI / Streamlit
-│
-├── tests/
-│   ├── test_data_prep.py
-│   ├── test_functions.py
-│   └── test_intents.py
-│
-├── notebooks/
-│   └── EDA.ipynb             # Exploração inicial dos dados
-│
-├── requirements.txt
-├── README.md
-└── .env                      # Chaves de API, endpoints, etc.
+![LangChain Tool Calling Flow](https://python.langchain.com/v0.2/assets/images/tool_calling_flow-ead8d93a8b69c88e3076457ed28f41ae.png)
+
+
+
+## TO DO:
+  - sanitizar
+  - fallback
+  - buffer
+  - vector search
+  - unit test
+  - test sql query > input user message
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+python src/main.py --interactive
+python src/main.py -p "Em qual faixa etária concentram-se a maioria das internações?" -f
+
+python src/main.py -p "Qual é o numero de internacoes por faixa etaria?" -f
+
+Quais as 5 cidades com o maior número de internações?
+ Qual faixa etaria tem o maior numero de internacoes?
+ Qual é o numero de internacoes por faixa etaria?

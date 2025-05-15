@@ -1,11 +1,34 @@
 from langchain_core.tools import tool
 from loader import load_raw, load_sus
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Any
 import pandas as pd
 import numpy as np
+import logging
 
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Carregar e verificar dados
 _df = load_sus()
+logger.info(f"DataFrame carregado: {len(_df)} registros")
+
+# Filtrar apenas diagnósticos que começam com J
+_df_filtered = _df[_df.DIAG_PRINC.str.startswith("J")]
+logger.info(f"Após filtro de diagnóstico J: {len(_df_filtered)} registros")
+
+# Se o DataFrame filtrado não estiver vazio, use-o; caso contrário, use o original
+_df = _df_filtered if not _df_filtered.empty else _df
+logger.info(f"DataFrame final: {len(_df)} registros")
+# logger.info(f"Colunas disponíveis: {_df.columns.tolist()}")
+
+if 'IDADE' in _df.columns:
+    logger.info(f"Valores não-nulos na coluna IDADE: {_df['IDADE'].notna().sum()}")
+else:
+    logger.error("Coluna IDADE não encontrada no DataFrame!")
+
+_df = _df[_df.DIAG_PRINC.str.startswith("J")]
+
 
 @tool
 def get_max_age() -> int:
@@ -73,70 +96,78 @@ def get_top_ages(
             "menores": slice_ages(desc=False),
             "maiores": slice_ages(desc=True)
         }
-@tool
-def get_admission_age_groups() -> Dict[str, Dict[str, Union[int, float]]]:
+
+# 2) Parâmetros fixos de bins e labels
+_BINS   = [0,10,20,30,40,50,60,70,80,90,float("inf")]
+_LABELS = ['0-9','10-19','20-29','30-39','40-49',
+           '50-59','60-69','70-79','80-89','90+']
+
+def _compute_age_group_counts(df: pd.DataFrame) -> Dict[str,int]:
     """
-    Retorna a distribuição de internações por faixa etária (0-9, 10-19, ..., 90+),
-    incluindo contagem exata e porcentagem relativa, ordenada pelas faixas com mais internações.
+    Binning das idades nas faixas fixas e contagem de internações.
     """
-    # 1) extrai e limpa as idades
-    ages = pd.to_numeric(_df["IDADE"], errors="coerce").dropna().astype(int)
-    if ages.empty:
-        return {}
-    # filtra idades plausíveis
+    ages = pd.to_numeric(df["IDADE"], errors="coerce").dropna().astype(int)
     ages = ages[(ages >= 0) & (ages <= 120)]
+    faixa = pd.cut(ages, bins=_BINS, right=False, labels=_LABELS)
+    counts = faixa.value_counts().reindex(_LABELS, fill_value=0)
 
-    # 2) configura bins e labels
-    bins = list(range(0, 100, 10)) + [np.inf]
-    labels = [f"{i}-{i + 9}" for i in range(0, 90, 10)] + ["90+"]
+    # **RETORNE** o dict de faixa -> contagem
+    return { label: int(counts[label]) for label in _LABELS }
 
-    # 3) categoriza e conta
-    groups = pd.cut(ages, bins=bins, right=False, labels=labels)
-    counts = groups.value_counts().reindex(labels, fill_value=0)
-    total = int(counts.sum())
+@tool
+def get_admission_age_groups() -> Dict[str, int]:
+    """
+    Retorna o número de internações por faixa etária (0-9, 10-19, ..., 90+).
+    """
+    return _compute_age_group_counts(_df)
 
-    # 4) monta resultado ordenado descendentemente
-    sorted_labels = counts.sort_values(ascending=False).index.tolist()
-    result: Dict[str, Dict[str, Union[int, float]]] = {}
-    for label in sorted_labels:
-        cnt = int(counts[label])
-        pct = round(cnt / total * 100, 2) if total > 0 else 0.0
-        result[label] = {"count": cnt, "percent": pct}
+@tool
+def get_top_admission_age_group() -> Dict[str, Union[str,int]]:
+    """
+    Retorna a faixa etária com o maior número de internações e seu total.
+    """
+    counts = _compute_age_group_counts(_df)
+    top_range = max(counts, key=counts.get)
+    return {"age_group": top_range, "count": counts[top_range]}
 
-    return result
+@tool
+def get_top_cities(n: Union[int, str]) -> List[Dict[str, Any]]:
+    """
+    Retorna as top n cidades com mais internações respiratórias (CID J).
 
-# def get_mortality_rate(city: str, year: int) -> Union[float, Dict[str, str]]:
-#     """
-#     Retorna a taxa de mortalidade hospitalar por 1.000 internações
-#     em uma dada cidade e ano, usando o DataFrame `_df` carregado
-#     de `dados_sus3.csv`.
-#     """
-#     df = _df.copy()
-#     # converte DT_INTER de int/str para datetime e extrai o ano
-#     df["DT_INTER"] = pd.to_datetime(df["DT_INTER"].astype(str), format="%Y%m%d", errors="coerce")
-#     df["ano"] = df["DT_INTER"].dt.year
-#
-#     # filtro case-insensitive na cidade
-#     mask_city = df["CIDADE_RESIDENCIA_PACIENTE"].str.lower() == city.lower()
-#     mask_year = df["ano"] == year
-#     sub = df[mask_city & mask_year]
-#
-#     if sub.empty:
-#         return {"error": f"Sem dados de internações para '{city}' em {year}"}
-#
-#     total_internacoes = len(sub)
-#     total_mortes      = int(sub["MORTE"].sum())
-#
-#     if total_internacoes == 0:
-#         return {"error": f"Nenhuma internação registrada para '{city}' em {year}"}
-#
-#     rate = total_mortes / total_internacoes * 1000
-#     return round(rate, 2)
+    Parâmetros:
+    - n (int ou str): número de cidades a retornar (>= 1).
 
-# @tool
-# def get_names_unique_city():
-#     """
-#     Retorna uma lista de cidades únicas.
-#     """
-#     _df = load_raw()
-#     return _df["CIDADE_RESIDENCIA_PACIENTE"].unique().tolist()
+    Retorno:
+    - Lista de dicionários no formato {"cidade": str, "internacoes": int},
+      ordenada da cidade com mais internações para menos.
+    """
+    # 1) Converte e valida n
+    try:
+        n_int = int(n)
+    except (ValueError, TypeError):
+        raise ValueError("Parâmetro 'n' deve ser um inteiro válido.")
+    if n_int < 1:
+        raise ValueError("Parâmetro 'n' deve ser maior ou igual a 1.")
+
+    # 2) Carrega e filtra SUS por CID J
+    df = load_sus()
+    df = df[df["DIAG_PRINC"].astype(str).str.upper().str.startswith("J")]
+
+    # 3) Conta internações por cidade
+    city_counts = (
+        df["CIDADE_RESIDENCIA_PACIENTE"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .value_counts()
+    )
+
+    # 4) Pega as top n cidades
+    top_n = city_counts.head(n_int)
+
+    # 5) Formata resultado
+    return [
+        {"cidade": cidade, "internacoes": int(internacoes)}
+        for cidade, internacoes in top_n.items()
+    ]

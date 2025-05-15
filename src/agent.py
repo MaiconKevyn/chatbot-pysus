@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Tuple, Union
 from langchain_ollama.chat_models import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from tools import get_top_ages, get_admission_age_groups  # import your tool functions
+from tools import get_top_ages, get_admission_age_groups, get_top_admission_age_group, get_top_cities
 
 # Configure logger
 logging.basicConfig(
@@ -19,6 +19,8 @@ LOGGER = logging.getLogger(__name__)
 TOOL_REGISTRY: Dict[str, Any] = {
     get_top_ages.name: get_top_ages,
     get_admission_age_groups.name: get_admission_age_groups,
+    get_top_admission_age_group.name: get_top_admission_age_group,
+    get_top_cities.name: get_top_cities
 }
 
 
@@ -33,6 +35,7 @@ def build_model(model_name: str = "llama3.2") -> ChatOllama:
     )
 
 
+
 def build_agent(model_name: str = "llama3.2") -> Any:
     """
     Vincula as ferramentas ao modelo e retorna o agente.
@@ -40,7 +43,6 @@ def build_agent(model_name: str = "llama3.2") -> Any:
     model = build_model(model_name)
     tools = list(TOOL_REGISTRY.values())
     return model.bind_tools(tools)
-
 
 def dispatch_tool_calls(res: Any, messages: List[Any]) -> None:
     """
@@ -94,10 +96,13 @@ def get_response(
     o conteúdo final e o histórico de mensagens.
     """
     # Mensagens iniciais
-    system_prompt = (
-        "Você é um assistente de IA especializado em responder perguntas estatísticas "
-        "sobre dados de saúde pública. Use funções quando apropriado."
-    )
+    system_prompt = """
+    Você é um assistente de saúde pública e um chatbot amigável.
+    Quando receber o resultado de uma ferramenta em JSON, **não devolva o JSON cru**:
+    - Interprete e explique em linguagem natural em português.
+    - Use tom acolhedor: “Claro! …”, “Com certeza! …”, “Veja só: …”.
+    - Seja direto na resposta principal e dê contexto breve.
+    """
     messages: List[Any] = [SystemMessage(system_prompt), HumanMessage(prompt)]
 
     if use_function_calling:
